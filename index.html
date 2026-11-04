@@ -153,14 +153,22 @@
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿`;
 */
-    const firebaseConfig = {
-      apiKey: "AIzaSyA_hKOx4wb17A3PItA32pHLuXgofG2P9Ig",
-      authDomain: "retro-terminal-aa057.firebaseapp.com",
-      projectId: "retro-terminal-aa057",
-      storageBucket: "retro-terminal-aa057.firebasestorage.app",
-      messagingSenderId: "905629346840",
-      appId: "1:905629346840:web:b1708470592011e9d8a76d"
-    };
+      
+    <script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js";
+  const firebaseConfig = {
+    apiKey: "AIzaSyA_hKOx4wb17A3PItA32pHLuXgofG2P9Ig",
+    authDomain: "retro-terminal-aa057.firebaseapp.com",
+    databaseURL: "https://retro-terminal-aa057-default-rtdb.firebaseio.com",
+    projectId: "retro-terminal-aa057",
+    storageBucket: "retro-terminal-aa057.firebasestorage.app",
+    messagingSenderId: "905629346840",
+    appId: "1:905629346840:web:4e0998f07e8e8df4d8a76d"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+</script>
 
     let currentStep = "PASSWORD"; 
     let currentUser = "";
