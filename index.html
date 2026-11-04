@@ -120,7 +120,7 @@
       text-shadow: 0 0 6px rgba(0, 255, 102, 0.6);
     }
   </style>
-  <!-- Firebase SDKs -->
+  <!-- Firebase Compat SDKs -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
@@ -140,31 +140,24 @@
   <script>
     const SECRET_PASSWORD = "passwerd";
 
-///////////////////////////////////////////////////////
-<script type="module">
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js";
-  import { getAnalytics } from "https://www.gstatic.com/firebasejs/13.2.0/firebase-analytics.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
+    const HEART_ART = `
+  /\\_/\\  (
+ ( ._. ) _)  <3
+_/     \\ 
+(__/___)
+    `;
 
-  // Your web app's Firebase configuration
-  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-  const firebaseConfig = {
-    apiKey: "AIzaSyCb9xnEEylZwLDrSGtRJEX91T5pU_jTDwc",
-    authDomain: "ccrom-7ba66.firebaseapp.com",
-    projectId: "ccrom-7ba66",
-    storageBucket: "ccrom-7ba66.firebasestorage.app",
-    messagingSenderId: "608692639636",
-    appId: "1:608692639636:web:4c08ce981c6fd983bce181",
-    measurementId: "G-N0L6DS54RT"
-  };
+    const firebaseConfig = {
+      apiKey: "AIzaSyCb9xnEEylZwLDrSGtRJEX91T5pU_jTDwc",
+      authDomain: "ccrom-7ba66.firebaseapp.com",
+      databaseURL: "https://ccrom-7ba66-default-rtdb.firebaseio.com",
+      projectId: "ccrom-7ba66",
+      storageBucket: "ccrom-7ba66.firebasestorage.app",
+      messagingSenderId: "608692639636",
+      appId: "1:608692639636:web:4c08ce981c6fd983bce181",
+      measurementId: "G-N0L6DS54RT"
+    };
 
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-  const analytics = getAnalytics(app);
-</script>
-///////////////////////////////////////////////////////
     let currentStep = "PASSWORD"; 
     let currentUser = "";
     let db = null;
