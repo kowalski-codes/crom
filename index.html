@@ -9,10 +9,11 @@
   <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
   <style>
     :root {
-      --phosphor: #00ff66;
-      --phosphor-dim: #008f39;
-      --phosphor-bright: #66ff99;
-      --bg: #050a05;
+      --phosphor: #7e9481;
+      --phosphor-dim: #5a6e5d;
+      --phosphor-bright: #96ab99;
+      --bg: #232826;
+      --bar-bg: #1e2321;
     }
 
     * {
@@ -31,19 +32,64 @@
       overflow: hidden;
       display: flex;
       flex-direction: column;
-      text-shadow: 0 0 6px rgba(0, 255, 102, 0.45);
+      position: relative;
     }
 
     /* Top Status Bar */
     header {
-      background: #001a09;
+      background: var(--bar-bg);
       border-bottom: 1px solid var(--phosphor-dim);
       padding: 6px 14px;
       display: flex;
       justify-content: space-between;
+      align-items: center;
       text-transform: uppercase;
-      font-size: 18px;
+      font-size: 16px;
       letter-spacing: 1px;
+      z-index: 10;
+    }
+
+    #clock {
+      font-size: 13px;
+      color: var(--phosphor-dim);
+      letter-spacing: 0.5px;
+    }
+
+    /* Centered Darknet Box (Password & Lockout) */
+    #center-overlay {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      border: 1px solid var(--phosphor-dim);
+      padding: 24px 32px;
+      background: var(--bg);
+      text-align: center;
+      min-width: 380px;
+      max-width: 90%;
+      z-index: 20;
+    }
+
+    #center-overlay.hidden {
+      display: none;
+    }
+
+    .box-title {
+      color: var(--phosphor-bright);
+      font-size: 22px;
+      margin-bottom: 12px;
+      letter-spacing: 1px;
+    }
+
+    .box-body {
+      color: var(--phosphor);
+      font-size: 19px;
+      line-height: 1.4;
+      white-space: pre-line;
+    }
+
+    .box-danger {
+      color: #9c6060;
     }
 
     /* Main Terminal Log */
@@ -82,16 +128,16 @@
       white-space: nowrap;
     }
     .user-peer {
-      color: #70db93;
+      color: var(--phosphor);
       white-space: nowrap;
     }
     .sys-msg {
       color: var(--phosphor-dim);
       font-style: italic;
+      white-space: pre-wrap;
     }
     .sys-err {
-      color: #ff3333;
-      text-shadow: 0 0 6px rgba(255, 51, 51, 0.5);
+      color: #9c6060;
     }
 
     /* Bottom Command Prompt */
@@ -99,8 +145,9 @@
       display: flex;
       align-items: center;
       padding: 10px 16px;
-      background: #001105;
+      background: var(--bar-bg);
       border-top: 1px solid var(--phosphor-dim);
+      z-index: 10;
     }
 
     #prompt-label {
@@ -117,7 +164,10 @@
       font-family: 'VT323', monospace;
       font-size: 21px;
       caret-color: var(--phosphor);
-      text-shadow: 0 0 6px rgba(0, 255, 102, 0.6);
+    }
+
+    #cmd-input:disabled {
+      cursor: not-allowed;
     }
   </style>
   <!-- Firebase Compat SDKs -->
@@ -130,6 +180,14 @@
     <span id="header-user">SESSION: LOCKED</span>
   </header>
 
+  <!-- Centered Darknet Box (Password & Lockout) -->
+  <div id="center-overlay">
+    <div id="box-title" class="box-title">[ ENCRYPTED RELAY NODE ]</div>
+    <div id="box-body" class="box-body">WARNING: RESTRICTED CIPHERTEXT PROTOCOL.
+UNAUTHORIZED HANDSHAKES LOGGED.
+AUTHENTICATION ATTEMPTS REMAINING: 3</div>
+  </div>
+
   <main id="terminal"></main>
 
   <footer id="prompt-bar">
@@ -139,13 +197,7 @@
 
   <script>
     const SECRET_PASSWORD = "passwerd";
-
-    const HEART_ART = `
-  /\\_/\\  (
- ( ._. ) _)  <3
-_/     \\ 
-(__/___)
-    `;
+    let attemptsRemaining = 3;
 
     const firebaseConfig = {
       apiKey: "AIzaSyCb9xnEEylZwLDrSGtRJEX91T5pU_jTDwc",
@@ -160,28 +212,129 @@ _/     \\
 
     let currentStep = "PASSWORD"; 
     let currentUser = "";
+    let isInitialLoadDone = false;
+    let isBooting = false;
     let db = null;
     let messagesRef = null;
+
+    // Audio Assets
+    const soundJoin = new Audio("join.mp3");
+    const soundMsg = new Audio("msg.mp3");
 
     const terminal = document.getElementById("terminal");
     const input = document.getElementById("cmd-input");
     const promptLabel = document.getElementById("prompt-label");
     const headerUser = document.getElementById("header-user");
+    const centerOverlay = document.getElementById("center-overlay");
+    const boxTitle = document.getElementById("box-title");
+    const boxBody = document.getElementById("box-body");
+
+    // Helper: 24-hour military time
+    function getMilitaryTime() {
+      return new Date().toLocaleTimeString('en-GB', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit', 
+        hour12: false 
+      });
+    }
 
     // Real-time Header Clock
     function updateClock() {
-      const now = new Date();
-      document.getElementById("clock").textContent = now.toTimeString().split(" ")[0];
+      document.getElementById("clock").textContent = getMilitaryTime();
     }
     setInterval(updateClock, 1000);
     updateClock();
 
-    function writeLine(text, className = "") {
+    // Promise-based Typewriter Function
+    function typeTextPromise(targetElement, fullText, speed = 14) {
+      return new Promise((resolve) => {
+        let idx = 0;
+        const interval = setInterval(() => {
+          if (idx < fullText.length) {
+            targetElement.textContent += fullText.charAt(idx);
+            idx++;
+            terminal.scrollTop = terminal.scrollHeight;
+          } else {
+            clearInterval(interval);
+            resolve();
+          }
+        }, speed);
+      });
+    }
+
+    // Static print for chat archives
+    function writeLine(htmlContent, className = "") {
       const div = document.createElement("div");
       if (className) div.className = className;
-      div.innerHTML = text;
+      div.innerHTML = htmlContent;
       terminal.appendChild(div);
       terminal.scrollTop = terminal.scrollHeight;
+      return div;
+    }
+
+    // Stream live message arrivals
+    function streamLine(prefixHtml, textPayload, className = "") {
+      const div = document.createElement("div");
+      if (className) div.className = className;
+      div.innerHTML = prefixHtml;
+      const textSpan = document.createElement("span");
+      textSpan.className = "msg-text";
+      div.appendChild(textSpan);
+      terminal.appendChild(div);
+      typeTextPromise(textSpan, textPayload, 14);
+    }
+
+    // Sequential Boot & Loading Sequence (3-second handshake)
+    async function startBootSequence() {
+      isBooting = true;
+      input.disabled = true;
+
+      // Line 1: Registered Callsign
+      const line1 = document.createElement("div");
+      line1.className = "sys-msg";
+      terminal.appendChild(line1);
+      await typeTextPromise(line1, `[OK] CALLSIGN REGISTERED: ${currentUser}`);
+
+      // Line 2: 3-Second Loading Animation
+      const line2 = document.createElement("div");
+      line2.className = "sys-msg";
+      terminal.appendChild(line2);
+      const baseText = "DECRYPTING ARCHIVES & CONNECTING TO LIVE CHANNEL";
+      line2.textContent = baseText;
+
+      let elapsed = 0;
+      let dotCount = 0;
+      await new Promise((resolve) => {
+        const loadInterval = setInterval(() => {
+          elapsed += 250;
+          dotCount = (dotCount + 1) % 5;
+          line2.textContent = baseText + ".".repeat(dotCount);
+          if (elapsed >= 3000) {
+            clearInterval(loadInterval);
+            line2.textContent = baseText + "... [DONE]";
+            resolve();
+          }
+        }, 250);
+      });
+
+      // Line 3: Direct to /help
+      const line3 = document.createElement("div");
+      line3.className = "sys-msg";
+      terminal.appendChild(line3);
+      await typeTextPromise(line3, "TYPE /help FOR AVAILABLE COMMAND DIRECTIVES.");
+
+      // Line 4: Divider
+      const line4 = document.createElement("div");
+      line4.className = "sys-msg";
+      terminal.appendChild(line4);
+      await typeTextPromise(line4, "-------------------------------------------------");
+
+      // Enable input & mount Firebase archives
+      input.disabled = false;
+      input.focus();
+      isBooting = false;
+      initFirebase();
     }
 
     // Input Handler & Command Parser
@@ -189,18 +342,29 @@ _/     \\
       if (e.key !== "Enter") return;
       const val = input.value.trim();
       input.value = "";
-      if (!val) return;
+      if (!val || isBooting) return;
 
-      // STAGE 1: PASSWORD AUTHENTICATION
+      // STAGE 1: PASSWORD AUTHENTICATION (3 ATTEMPTS)
       if (currentStep === "PASSWORD") {
         if (val === SECRET_PASSWORD) {
-          writeLine("[OK] AUTHORIZATION ACCEPTED. IDENTITY CONFIRMED.", "sys-msg");
-          writeLine("ENTER OPERATOR CALLSIGN / HANDLE:");
+          boxTitle.textContent = "[ IDENTITY ACCEPTED ]";
+          boxBody.textContent = "ENTER OPERATOR CALLSIGN / HANDLE BELOW.";
           promptLabel.textContent = "CALLSIGN:";
           input.type = "text";
           currentStep = "USERNAME";
         } else {
-          writeLine("[DENIED] INVALID PASSCODE. ACCESS REJECTED.", "sys-err");
+          attemptsRemaining--;
+          if (attemptsRemaining > 0) {
+            boxBody.textContent = `WARNING: RESTRICTED CIPHERTEXT PROTOCOL.\nUNAUTHORIZED HANDSHAKES LOGGED.\nAUTHENTICATION ATTEMPTS REMAINING: ${attemptsRemaining}`;
+          } else {
+            // Permanent Lockout Protocol
+            boxTitle.textContent = "TERMINAL HALTED";
+            boxTitle.classList.add("box-danger");
+            boxBody.textContent = "GOODBYE.\nCONNECTION SEVERED.";
+            boxBody.classList.add("box-danger");
+            promptLabel.textContent = "[HALTED]";
+            input.disabled = true;
+          }
         }
         return;
       }
@@ -209,27 +373,28 @@ _/     \\
       if (currentStep === "USERNAME") {
         currentUser = val.toUpperCase();
         headerUser.textContent = `CALLSIGN: ${currentUser}`;
-        writeLine(`[OK] CALLSIGN REGISTERED: ${currentUser}`, "sys-msg");
-        writeLine("DECRYPTING ARCHIVES & CONNECTING TO LIVE CHANNEL...", "sys-msg");
-        writeLine("AVAILABLE COMMANDS: /clear, /purge, /help, /whoami", "sys-msg");
-        writeLine("-------------------------------------------------");
-        
+        centerOverlay.classList.add("hidden");
         promptLabel.textContent = `${currentUser}>`;
         currentStep = "CHAT";
-        initFirebase();
+
+        // Play Joining Lobby Sound
+        soundJoin.play().catch(() => {});
+
+        // Begin loading sequence before archives load
+        startBootSequence();
         return;
       }
 
       // STAGE 3: LIVE TRANSMISSION & COMMANDS
       if (currentStep === "CHAT") {
-        // Command: /clear (Wipes current screen buffer only)
+        // Command: /clear
         if (val === "/clear") {
           terminal.innerHTML = "";
           writeLine("TERMINAL BUFFER CLEARED. ARCHIVES REMAIN IN DATABASE.", "sys-msg");
           return;
         }
 
-        // Command: /purge (Wipes persistent cloud database)
+        // Command: /purge
         if (val === "/purge") {
           if (confirm("WARNING: Purge will permanently delete all shared logs. Continue?")) {
             if (messagesRef) {
@@ -247,41 +412,33 @@ _/     \\
           return;
         }
 
-        // Command: /help
+        // Command: /help (Aligned Terminal Manual)
         if (val === "/help") {
-          writeLine("COMMAND DIRECTIVES:", "sys-msg");
-          writeLine("  /clear   : Wipes local terminal screen");
-          writeLine("  /purge   : Permanently deletes all saved messages from the cloud");
-          writeLine("  /whoami  : Displays current active callsign");
+          const helpManual = 
+`======================= COMMAND DIRECTIVES =======================
+  COMMAND    DESCRIPTION
+  -------    -----------
+  /help      Display terminal manual & directives
+  /clear     Flush local terminal screen buffer
+  /whoami    Display active operator handle
+  /purge     Permanently erase all archived logs from cloud
+==================================================================`;
+          writeLine(helpManual, "sys-msg");
           return;
         }
 
-        // Hidden Command: /mwa
-        if (val === "/mwa") {
-          if (messagesRef) {
-            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            messagesRef.push({
-              user: currentUser,
-              text: HEART_ART,
-              time: timestamp
-            });
-          }
-          return;
-        }
-
-        // Send Message to Firebase Realtime Database
+        // Transmit Message to Firebase
         if (messagesRef) {
-          const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
           messagesRef.push({
             user: currentUser,
             text: val,
-            time: timestamp
+            time: getMilitaryTime()
           });
         }
       }
     });
 
-    // Firebase Realtime Connection
+    // Firebase Connection & Sync
     function initFirebase() {
       try {
         if (!firebase.apps.length) {
@@ -290,22 +447,35 @@ _/     \\
         db = firebase.database();
         messagesRef = db.ref("chat_logs");
 
-        // Listen for new messages & load initial message history
+        // Backlog load detection
+        messagesRef.once("value", () => {
+          isInitialLoadDone = true;
+        });
+
+        // Listen for all messages
         messagesRef.on("child_added", (snapshot) => {
           const data = snapshot.val();
           if (!data) return;
 
           const isSelf = data.user === currentUser;
           const userClass = isSelf ? "user-self" : "user-peer";
-          
-          writeLine(
-            `<span class="ts">[${data.time}]</span> <span class="${userClass}">&lt;${data.user}&gt;</span> <span class="msg-text">${escapeHtml(data.text)}</span>`,
-            "msg-row"
-          );
+          const prefix = `<span class="ts">[${data.time}]</span> <span class="${userClass}">&lt;${data.user}&gt;</span> `;
+
+          if (!isInitialLoadDone) {
+            // Render past messages instantly once handshake finishes
+            writeLine(`${prefix}<span class="msg-text">${escapeHtml(data.text)}</span>`, "msg-row");
+          } else {
+            // Play notification tone on real-time peer messages
+            if (!isSelf) {
+              soundMsg.play().catch(() => {});
+            }
+            // Stream new messages using typewriter effect
+            streamLine(prefix, data.text, "msg-row");
+          }
         });
 
       } catch (err) {
-        writeLine(`[RELAY ERROR]: UNABLE TO CONNECT TO REALTIME CLOUD. VERIFY FIREBASE KEYS.`, "sys-err");
+        writeLine("[RELAY ERROR]: UNABLE TO CONNECT TO REALTIME CLOUD.", "sys-err");
       }
     }
 
@@ -313,9 +483,11 @@ _/     \\
       return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
 
-    // Keep focus inside terminal input on click
+    // Keep focus inside terminal input on click unless halted or booting
     document.addEventListener("click", () => {
-      input.focus();
+      if (!input.disabled && !isBooting) {
+        input.focus();
+      }
     });
   </script>
 </body>
